@@ -1,5 +1,7 @@
 from django.core.exceptions import ValidationError
 from django.db import transaction
+from django.conf import settings
+from django.core.mail import send_mail
 
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
@@ -9,7 +11,9 @@ from rest_framework.permissions import IsAuthenticated, AllowAny
 from drf_yasg.utils import swagger_auto_schema
 from drf_yasg import openapi
 
-from apps.users.models import User
+import resend
+
+from apps.users.models import User, PasswordResetCode
 from apps.users.serializers.user_serializer import UserSerializer
 
 
@@ -21,7 +25,7 @@ class UserViewSet(viewsets.GenericViewSet):
     serializer_class = UserSerializer
 
     def get_permissions(self):
-        if self.action == 'create':
+        if self.action in ['create', 'request_code', 'reset_password']:
             permission_classes = [AllowAny]
         else:
             permission_classes = [IsAuthenticated]
@@ -123,37 +127,108 @@ class UserViewSet(viewsets.GenericViewSet):
             return Response(status=status.HTTP_404_NOT_FOUND)
 
     @swagger_auto_schema(
-        operation_description="Restablece la contraseña del usuario",
-        request_body=openapi.Schema(
+    operation_description="Solicita un código de verificación para restablecer la contraseña",
+    request_body=openapi.Schema(
             type=openapi.TYPE_OBJECT,
             properties={
                 'email': openapi.Schema(type=openapi.TYPE_STRING),
-                'new_password': openapi.Schema(type=openapi.TYPE_STRING),
-                'confirm_password': openapi.Schema(type=openapi.TYPE_STRING),
             },
-            required=['email', 'new_password', 'confirm_password']
+            required=['email']
         ),
         responses={
-            200: openapi.Response(
-                description="Contraseña actualizada exitosamente",
-                examples={
-                    "application/json": {
-                        "message": "Contraseña actualizada correctamente"
-                    }
-                }
-            ),
+            200: "Código enviado exitosamente",
             400: "Datos inválidos",
             404: "Usuario no encontrado"
         }
     )
-    @action(detail=False, methods=['post'], permission_classes=[AllowAny])
+    @action(detail=False, methods=['post'])
+    def request_code(self, request):
+        """
+        Envía un código de verificación al email proporcionado.
+
+        Request:
+        {
+            "email": "string - Correo electrónico del usuario"
+        }
+
+        Response:
+        {
+            "message": "string - Mensaje de confirmación"
+        }
+        """
+        try:
+            email = request.data.get('email')
+            
+            if not email:
+                return Response(
+                    {'error': 'El email es requerido'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            # Verificar que el usuario existe
+            try:
+                user = User.objects.get(email=email)
+            except User.DoesNotExist:
+                return Response(
+                    {'error': 'No existe un usuario con este email'},
+                    status=status.HTTP_404_NOT_FOUND
+                )
+
+            # Si hay un código válido existente, lo invalidamos
+            PasswordResetCode.objects.filter(
+                email=email, 
+                is_used=False
+            ).update(is_used=True)
+
+            # Crear nuevo código
+            reset_code = PasswordResetCode.objects.create(email=email)
+            
+            # Enviar email usando el backend de email de Django
+            send_mail(
+                'Código de recuperación',  # asunto
+                f'Tu código de verificación es: {reset_code.code}',  # mensaje
+                settings.EMAIL_HOST_USER,  # remitente
+                [email],  # destinatario
+                fail_silently=False,  # si es False, levantará excepciones en caso de error
+            )
+
+            return Response({
+                'message': 'Si el correo existe en nuestra base de datos, recibirás un código de verificación'
+            }, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            return Response(
+                {'error': str(e)},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+    @swagger_auto_schema(
+        operation_description="Restablece la contraseña usando el código de verificación",
+        request_body=openapi.Schema(
+            type=openapi.TYPE_OBJECT,
+            properties={
+                'email': openapi.Schema(type=openapi.TYPE_STRING),
+                'code': openapi.Schema(type=openapi.TYPE_STRING),
+                'new_password': openapi.Schema(type=openapi.TYPE_STRING),
+                'confirm_password': openapi.Schema(type=openapi.TYPE_STRING),
+            },
+            required=['email', 'code', 'new_password', 'confirm_password']
+        ),
+        responses={
+            200: "Contraseña actualizada exitosamente",
+            400: "Datos inválidos o código expirado",
+            404: "Usuario no encontrado"
+        }
+    )
+    @action(detail=False, methods=['post'])
     def reset_password(self, request):
         """
-        Restablece la contraseña de un usuario cuando la ha olvidado.
+        Restablece la contraseña usando un código de verificación.
 
         Request:
         {
             "email": "string - Correo electrónico del usuario",
+            "code": "string - Código de verificación",
             "new_password": "string - Nueva contraseña",
             "confirm_password": "string - Confirmación de la nueva contraseña"
         }
@@ -162,19 +237,16 @@ class UserViewSet(viewsets.GenericViewSet):
         {
             "message": "string - Mensaje de confirmación"
         }
-
-        Errores:
-        - 400: Datos faltantes o contraseñas no coinciden
-        - 404: Usuario no encontrado
         """
         try:
             email = request.data.get('email')
+            code = request.data.get('code')
             new_password = request.data.get('new_password')
             confirm_password = request.data.get('confirm_password')
 
-            if not email or not new_password or not confirm_password:
+            if not all([email, code, new_password, confirm_password]):
                 return Response(
-                    {'error': 'Se requieren email y la nueva contraseña'},
+                    {'error': 'Todos los campos son requeridos'},
                     status=status.HTTP_400_BAD_REQUEST
                 )
 
@@ -184,13 +256,28 @@ class UserViewSet(viewsets.GenericViewSet):
                     status=status.HTTP_400_BAD_REQUEST
                 )
 
+            reset_code = PasswordResetCode.objects.filter(
+                email=email,
+                code=code,
+                is_used=False
+            ).order_by('-created_at').first()
+
+            if not reset_code or not reset_code.is_valid:
+                return Response(
+                    {'error': 'Código inválido o expirado'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
             user = User.objects.get(email=email)
             user.set_password(new_password)
             user.save()
 
+            reset_code.is_used = True
+            reset_code.save()
+
             return Response({
-                'message': 'Contraseña actualizada correctamente',
-            }, status=status.HTTP_200_OK)
+                'message': 'Contraseña actualizada correctamente'
+            })
 
         except User.DoesNotExist:
             return Response(
