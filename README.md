@@ -1,7 +1,5 @@
 # prueba_tecnica_quo_digital
 
-# Proyecto de Integración Bancaria con Belvo
-
 ## Descripción
 Sistema de integración bancaria que permite a los usuarios ver sus cuentas y balances de diferentes bancos en un solo lugar, utilizando la API de Belvo.
 
