@@ -261,8 +261,3 @@ Ejemplo de respuesta de error:
 
 ## Contacto
 Magno Stiven Martinez Bueno - magno12.mcmb@gmail.com
-
-## Agradecimientos
-- Belvo API
-- Django REST Framework
-- Otros contribuidores
