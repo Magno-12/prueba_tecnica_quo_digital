@@ -41,6 +41,7 @@ urlpatterns = [
     # API URLs
     path('api/users/', include('apps.users.urls')),
     path('api/auth/', include('apps.authentication.urls')),
+    path('api/belvo/', include('apps.belvo.urls')),
 
     # Swagger URLs
     path('swagger<format>/', schema_view.without_ui(cache_timeout=0), name='schema-json'),

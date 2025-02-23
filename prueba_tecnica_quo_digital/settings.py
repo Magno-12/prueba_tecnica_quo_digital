@@ -57,6 +57,7 @@ CUSTOM_APPS = [
     'apps.default',
     'apps.authentication',
     'apps.users',
+    'apps.belvo',
 ]
 
 INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + CUSTOM_APPS
@@ -119,6 +120,10 @@ EMAIL_PORT = 587
 EMAIL_USE_TLS = True
 EMAIL_HOST_USER = os.environ.get('EMAIL_HOST_USER')
 EMAIL_HOST_PASSWORD = os.environ.get('EMAIL_HOST_PASSWORD')
+
+BELVO_SECRET_ID = os.environ.get('BELVO_SECRET_ID')
+BELVO_SECRET_PASSWORD = os.environ.get('BELVO_SECRET_PASSWORD')
+BELVO_API_URL = os.environ.get('BELVO_API_URL')
 
 # Password validation
 # https://docs.djangoproject.com/en/4.2/ref/settings/#auth-password-validators
