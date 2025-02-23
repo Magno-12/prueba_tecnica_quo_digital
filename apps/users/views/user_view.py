@@ -11,8 +11,6 @@ from rest_framework.permissions import IsAuthenticated, AllowAny
 from drf_yasg.utils import swagger_auto_schema
 from drf_yasg import openapi
 
-import resend
-
 from apps.users.models import User, PasswordResetCode
 from apps.users.serializers.user_serializer import UserSerializer
 
