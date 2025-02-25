@@ -3,9 +3,9 @@ __pycache__/
 *.py[cod]
 *.class
 
-# Django Migrations
-**/migrations/*.py
-!**/migrations/__init__.py
+# # Django Migrations
+# **/migrations/*.py
+# !**/migrations/__init__.py
 
 # Virtual Environment
 venv/
