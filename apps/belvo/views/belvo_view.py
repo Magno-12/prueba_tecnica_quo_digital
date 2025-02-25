@@ -11,6 +11,7 @@ from drf_yasg.utils import swagger_auto_schema
 from drf_yasg import openapi
 
 from apps.belvo.utils.credential import TEST_CREDENTIALS
+from apps.belvo.serializers.serializer import EmptySerializer
 
 
 class BelvoAPIViewSet(viewsets.GenericViewSet):
@@ -19,6 +20,13 @@ class BelvoAPIViewSet(viewsets.GenericViewSet):
     Maneja la obtención de instituciones bancarias, cuentas y transacciones.
     """
     permission_classes = [IsAuthenticated]
+    serializer_class = EmptySerializer
+
+    def get_serializer_class(self):
+        """
+        Devuelve un serializador vacío para la generación del esquema.
+        """
+        return EmptySerializer
 
     def get_queryset(self):
         """
